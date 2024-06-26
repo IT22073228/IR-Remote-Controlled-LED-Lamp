@@ -1,0 +1,246 @@
+#include <Arduino.h>
+#include <IRremote.h>
+
+// Function declarations
+void volumeUp();
+void volumeDown();
+void reduceBrightness();
+void increaseBrightness();
+void turnOn();
+void turnOff();
+void cycleColors();
+void resetForColorToggle();
+void resetToWhite();
+void updateLEDs();
+void setAllLEDs(bool state);
+void setWhiteLEDs(int count);
+void setRGBLED(int ledPin);
+
+
+// Pin assignments for LED connections
+#define RED_LED_PIN   13
+#define GREEN_LED_PIN 12
+#define BLUE_LED_PIN  11
+#define WHITE_LED_1   5
+#define WHITE_LED_2   6
+#define WHITE_LED_3   9
+#define WHITE_LED_4   10
+
+// Pin assignment for IR receiver
+#define IR_RECEIVE_PIN 2
+
+// IR Remote button codes
+#define VOLUME_UP_CODE 21 // Button code for Volume Up
+#define VOLUME_DOWN_CODE 7 // Button code for Volume Down
+#define CHANNEL_DOWN_CODE 69 // Button code for Channel Down
+#define CHANNEL_UP_CODE 71 // Button code for Channel Down
+
+
+// State variables
+int ledState = 0; // Current LED state
+bool toggleColors = false; // Flag for color toggling
+int colorCounter = 1; // Counter for color cycling
+int led_brightness[4] = {255, 255, 255, 255}; // Brightness levels for white LEDs
+int loopback = 0; // Counter for looping back
+
+void setup() {
+	
+	IrReceiver.begin(IR_RECEIVE_PIN); // Initialize IR receiver
+
+	// Initialize white LEDs as outputs
+	pinMode(WHITE_LED_1, OUTPUT);
+	pinMode(WHITE_LED_2, OUTPUT);
+	pinMode(WHITE_LED_3, OUTPUT);
+	pinMode(WHITE_LED_4, OUTPUT);
+
+	// Initialize RGB LEDs as outputs
+	pinMode(RED_LED_PIN, OUTPUT);
+	pinMode(GREEN_LED_PIN, OUTPUT);
+	pinMode(BLUE_LED_PIN, OUTPUT);
+}
+
+void loop() {
+	if (IrReceiver.decode()) { // Check for IR remote commands
+		IrReceiver.resume(); // Resume IR receiver for next command
+		int irCode = IrReceiver.decodedIRData.command; // Get the received IR command code
+		Serial.println(irCode); // Print the received IR code for debugging
+		if (irCode == VOLUME_UP_CODE) {
+			volumeUp(); // Call volume up function
+			} else if (irCode == VOLUME_DOWN_CODE) {
+			volumeDown(); // Call volume down function
+			} else if (irCode == CHANNEL_DOWN_CODE) {
+			reduceBrightness(); // Call reduce brightness function
+			} else if (irCode == CHANNEL_UP_CODE) {
+			increaseBrightness(); // Call increase brightness function
+		}
+	}
+}
+
+void volumeUp() {
+	if (toggleColors) {
+		cycleColors(); // Call the cycleColors function
+		} else {
+		turnOn(); // Call the turnOn function
+	}
+	updateLEDs();
+	delay(200);
+}
+
+void volumeDown() {
+	// Check if the ledState is greater than 4 and toggleColors is false
+	if (ledState > 4   && !toggleColors) {
+		resetForColorToggle(); // Call the resetColorMode function
+		} else if (toggleColors) {
+		resetToWhite(); // Call the resetToWhite function if toggleColors is true
+		} else {
+		turnOff(); // Call the turnOff function if toggleColors is false
+	}
+	updateLEDs();
+	delay(200);
+}
+
+void reduceBrightness() {
+	int i = ledState - 1;
+	for(i = 0; i < 4; i++){
+		led_brightness[i] -= 10; // Decrease the brightness by 10 units
+		if (led_brightness[i] < 0) {
+			led_brightness[i] = 0; // If the brightness is below 0, set it to 0
+		}
+		updateLEDs();
+	}
+}
+
+
+
+void increaseBrightness() {
+	int i = ledState - 1;
+	for(i = 0; i < 4; i++){
+		led_brightness[i] += 10; // Increase brightness by 10 units
+		if (led_brightness[i] > 255) { // Assuming maximum brightness is 255
+			led_brightness[i] = 255;
+		}
+		updateLEDs();
+	}
+}
+
+
+void turnOn() {
+	ledState++; // Increment the ledState
+	if (ledState > 7) {
+		loopback++; // Increment the loopback counter
+		ledState = 7;  // Reset the ledState to 7
+		toggleColors = true;  // Enable color toggling
+		colorCounter = 1;  // Reset the colorCounter to 1
+	}
+}
+
+void turnOff() {
+	ledState--;
+	led_brightness[ledState] = 255; // Set the brightness of the current LED state to maximum (255)
+	if (ledState < 0) {
+		ledState = 0;  // Reset the ledState to 0
+	}
+}
+
+void cycleColors() {
+	colorCounter++; // Increment the colorCounter
+	if (colorCounter > 3) {
+		colorCounter = 1;  // Reset the colorCounter to 1
+		loopback++; // Increment the loopback counter
+	}
+}
+
+void resetForColorToggle() {
+	ledState--; // Decrement the ledState
+	if (ledState <= 0) {
+		ledState = 0; // Reset the ledState to 0
+	}
+}
+
+void resetToWhite() {
+	colorCounter--; // Decrement the colorCounter
+	if (colorCounter < 1 && loopback > 0) {
+		colorCounter = 3;  // Reset the colorCounter to 3
+		loopback--;  // Decrement the loopback counter
+		if (loopback <= 0) {
+			toggleColors = false; // Disable color toggling
+			loopback = 0; // Reset the loopback counter to 0
+		}
+	}
+}
+
+void updateLEDs() {
+	if (!toggleColors) {
+		// Handle white LEDs and RGB LEDs for non-color toggle mode
+		switch (ledState) {
+			case 0: setAllLEDs(LOW); break; // All off
+			case 1: setWhiteLEDs(1); break;
+			case 2: setWhiteLEDs(2); break;
+			case 3: setWhiteLEDs(3); break;
+			case 4: setWhiteLEDs(4); break;
+			case 5: setRGBLED(RED_LED_PIN); break; // Red LED on
+			case 6: setRGBLED(GREEN_LED_PIN); break; // Green LED on
+			case 7: setRGBLED(BLUE_LED_PIN); break; // Blue LED on
+		}
+		} else {
+		// Handle RGB LED for color toggle mode
+		switch (colorCounter) {
+			case 0: setWhiteLEDs(4); break; // All off
+			case 1: setRGBLED(RED_LED_PIN); break; // Red LED on
+			case 2: setRGBLED(GREEN_LED_PIN); break; // Green LED on
+			case 3: setRGBLED(BLUE_LED_PIN); break; // Blue LED on
+		}
+	}
+}
+
+void setAllLEDs(bool state) { // Set the state (ON or OFF) for all LEDs
+	digitalWrite(WHITE_LED_1, state);
+	digitalWrite(WHITE_LED_2, state);
+	digitalWrite(WHITE_LED_3, state);
+	digitalWrite(WHITE_LED_4, state);
+	digitalWrite(RED_LED_PIN, state);
+	digitalWrite(GREEN_LED_PIN, state);
+	digitalWrite(BLUE_LED_PIN, state);
+}
+
+
+void setWhiteLEDs(int count) { // Turn off all RGB LEDs
+	digitalWrite(RED_LED_PIN, LOW);
+	digitalWrite(GREEN_LED_PIN, LOW);
+	digitalWrite(BLUE_LED_PIN, LOW);
+
+	// Set the brightness for each white LED based on the count
+	if (count >= 1) {
+		analogWrite(WHITE_LED_1, led_brightness[0]);
+		} else {
+		digitalWrite(WHITE_LED_1, LOW); // Turn off if count is less than 1
+	}
+
+	if (count >= 2) {
+		analogWrite(WHITE_LED_2, led_brightness[1]);
+		} else {
+		digitalWrite(WHITE_LED_2, LOW); // Turn off if count is less than 2
+	}
+
+	if (count >= 3) {
+		analogWrite(WHITE_LED_3, led_brightness[2]);
+		} else {
+		digitalWrite(WHITE_LED_3, LOW); // Turn off if count is less than 3
+	}
+
+	if (count >= 4) {
+		analogWrite(WHITE_LED_4, led_brightness[3]);
+		} else {
+		digitalWrite(WHITE_LED_4, LOW); // Turn off if count is less than 4
+	}
+}
+
+void setRGBLED(int ledPin) {
+	// Turn off all RGB LEDs
+	digitalWrite(RED_LED_PIN, LOW);
+	digitalWrite(GREEN_LED_PIN, LOW);
+	digitalWrite(BLUE_LED_PIN, LOW);
+	
+	// Turn on the specified RGB LED
+	digitalWrite(ledPin, HIGH);
+}
